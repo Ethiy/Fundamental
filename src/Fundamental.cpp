@@ -1,9 +1,10 @@
 // Imagine++ project
 // Project:  Fundamental
 // Author:   Pascal Monasse
-// Date:     2013/10/08
+// Modified by: Oussama Ennafii
+// Date:     2016/10/12
 
-#include "./Imagine/Features.h"
+#include "../Imagine/Features.h"
 #include <Imagine/Graphics.h>
 #include <Imagine/LinAlg.h>
 #include <vector>
@@ -19,8 +20,8 @@ struct Match {
 };
 
 // Display SIFT points and fill vector of point correspondences
-void algoSIFT(Image<Color,2> I1, Image<Color,2> I2,
-              vector<Match>& matches) {
+void algoSIFT(Image<Color,2> I1, Image<Color,2> I2, vector<Match>& matches) 
+{
     // Find interest points
     SIFTDetector D;
     D.setFirstOctave(-1);
@@ -50,13 +51,17 @@ void algoSIFT(Image<Color,2> I1, Image<Color,2> I2,
 
 // RANSAC algorithm to compute F from point matches (8-point algorithm)
 // Parameter matches is filtered to keep only inliers as output.
-FMatrix<float,3,3> computeF(vector<Match>& matches) {
+FMatrix<float,3,3> computeF(vector<Match>& matches) 
+{
     const float distMax = 1.5f; // Pixel error for inlier/outlier discrimination
     int Niter=100000; // Adjusted dynamically
     FMatrix<float,3,3> bestF;
     vector<int> bestInliers;
     // --------------- TODO ------------
-    // DO NOT FORGET NORMALIZATION OF POINTS
+    // DO NOT FORGET NORMALIZATION OF points
+    const int n_samples = 8;
+    const int n_matches = static_cast<int>( matches.size());
+    int n_inliers = static_cast<int>( bestInliers.size());
 
 
     // Updating matches with inliers only
@@ -83,16 +88,17 @@ int main(int argc, char* argv[])
 {
     srand((unsigned int)time(0));
 
-    const char* s1 = argc>1? argv[1]: srcPath("im1.jpg");
-    const char* s2 = argc>2? argv[2]: srcPath("im2.jpg");
+    const char* s1 = argc>1? argv[1]: srcPath("ressources/images/im1.jpg");
+    const char* s2 = argc>2? argv[2]: srcPath("ressources/images/im2.jpg");
 
     // Load and display images
     Image<Color,2> I1, I2;
     if( ! load(I1, s1) ||
         ! load(I2, s2) ) {
         cerr<< "Unable to load images" << endl;
-        return 1;
+        return EXIT_FAILURE;
     }
+
     int w = I1.width();
     openWindow(2*w, I1.height());
     display(I1,0,0);
@@ -104,7 +110,7 @@ int main(int argc, char* argv[])
     click();
     
     FMatrix<float,3,3> F = computeF(matches);
-    cout << "F="<< endl << F;
+    cout << "F="<< endl << F << flush;
 
     // Redisplay with matches
     display(I1,0,0);
@@ -122,5 +128,5 @@ int main(int argc, char* argv[])
     displayEpipolar(I1, I2, F);
 
     endGraphics();
-    return 0;
+    return EXIT_SUCCESS;
 }

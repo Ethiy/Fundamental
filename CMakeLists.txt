@@ -6,7 +6,7 @@ find_package(Imagine REQUIRED)
 
 project(Fundamental)
 add_executable(Fundamental
-        Fundamental.cpp
+        src/Fundamental.cpp
         Imagine/SIFT_VL.cpp
         Imagine/vl/generic.c Imagine/vl/host.c Imagine/vl/imop.c Imagine/vl/sift.c)
 ImagineUseModules(Fundamental LinAlg Images)
