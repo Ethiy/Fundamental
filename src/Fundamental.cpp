@@ -4,20 +4,38 @@
 // Modified by: Oussama Ennafii
 // Date:     2016/10/12
 
+// local includes
 #include "../Imagine/Features.h"
+
+// Imagine includes
 #include <Imagine/Graphics.h>
 #include <Imagine/LinAlg.h>
+
+// STD C++ includes
 #include <vector>
+#include <numeric>
+#include <algorithm>
+#include <random>
+
+// STD C includes
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
+
+// Namespaces
 using namespace Imagine;
 using namespace std;
 
+
+// Constants
 static const float BETA = 0.01f; // Probability of failure
 
+// Structures
 struct Match {
     float x1, y1, x2, y2;
 };
+
+// Functions
 
 // Display SIFT points and fill vector of point correspondences
 void algoSIFT(Image<Color,2> I1, Image<Color,2> I2, vector<Match>& matches) 
@@ -49,19 +67,74 @@ void algoSIFT(Image<Color,2> I1, Image<Color,2> I2, vector<Match>& matches)
     }
 }
 
+int random_index(int len)
+{
+    random_device device;
+    mt19937 gen(device());
+    uniform_int_distribution<int> X( 0, len-1);
+    return X(gen);
+}
+
+int _sample( vector<int>& v)
+{
+    assert(v.size());
+    int k = random_index( static_cast<int>( v.size()) );
+    int value = v[k];
+    v.erase( v.begin() + k);
+    return value;
+}
+
+vector<int> sampler( int n_samples, int n_matches)
+{
+    assert( n_samples <= n_matches && n_samples );
+
+    vector<int> samples( n_samples, 0);
+    vector<int> v(n_matches);
+    iota(v.begin(), v.end(), 0);
+    
+    for(int iterator = 0; iterator < n_samples; iterator++)
+        samples[iterator] = _sample(v);
+    return samples;
+}
+
+vector<int> infereF( vector<int> sampled_matches, float sigma, FMatrix<float,3,3> bestF)
+{
+    vector<int> inliers;
+    return inliers;
+}
+
+void estimateNiter(int& Niter, int n_inliers, int n_samples, int n_matches)
+{
+    assert(n_inliers != 0); // otherwise Niter == inf
+    Niter = max( static_cast<int>( ceil( log(BETA)/log(1- pow( static_cast<float>(n_inliers)/static_cast<float>(n_matches), static_cast<float>(n_samples))))), 0);
+}
+
 // RANSAC algorithm to compute F from point matches (8-point algorithm)
 // Parameter matches is filtered to keep only inliers as output.
 FMatrix<float,3,3> computeF(vector<Match>& matches) 
 {
-    const float distMax = 1.5f; // Pixel error for inlier/outlier discrimination
-    int Niter=100000; // Adjusted dynamically
+    const float distMax(1.5f); // Pixel error for inlier/outlier discrimination
+    int Niter(100000); // Adjusted dynamically
     FMatrix<float,3,3> bestF;
     vector<int> bestInliers;
     // --------------- TODO ------------
     // DO NOT FORGET NORMALIZATION OF points
-    const int n_samples = 8;
+    const int n_samples(8);
     const int n_matches = static_cast<int>( matches.size());
-    int n_inliers = static_cast<int>( bestInliers.size());
+    int n_inliers = n_samples; // In the worse case scenario there is at least the minimum points to estimate F
+
+    // Iterating
+    int counter(0);
+    vector<int> sampled_matches( n_samples, 0);
+    while( counter < Niter )
+    {
+        sampled_matches = sampler( n_samples, n_matches);
+        bestInliers = infereF( sampled_matches, distMax, bestF);
+        if( static_cast<int>( bestInliers.size()) >= n_inliers )
+            n_inliers = static_cast<int>( bestInliers.size());
+        counter++;
+        estimateNiter( Niter, n_inliers, n_samples, n_matches);
+    }  
 
 
     // Updating matches with inliers only
@@ -116,7 +189,7 @@ int main(int argc, char* argv[])
     display(I1,0,0);
     display(I2,w,0);
     for(size_t i=0; i<matches.size(); i++) {
-        Color c(rand()%256,rand()%256,rand()%256);
+        Color c( rand()%256, rand()%256, rand()%256);
         fillCircle(matches[i].x1+0, matches[i].y1, 2, c);
         fillCircle(matches[i].x2+w, matches[i].y2, 2, c);        
     }
