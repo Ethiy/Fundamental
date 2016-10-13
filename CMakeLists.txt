@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.4)
+
+project(Fundamental C CXX)
+
 include(CheckCXXCompilerFlag)
 
 if(CHECK_CXX_COMPILER_USED1)
@@ -37,7 +40,6 @@ list(APPEND CMAKE_MODULE_PATH "${p}") #For old Imagine++
 list(APPEND CMAKE_SYSTEM_FRAMEWORK_PATH /Library/Frameworks) #Mac, why not auto?
 find_package(Imagine REQUIRED)
 
-project(Fundamental)
 add_executable(Fundamental
         src/Fundamental.cpp
         Imagine/SIFT_VL.cpp
