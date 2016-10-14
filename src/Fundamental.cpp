@@ -16,6 +16,7 @@
 #include <numeric>
 #include <algorithm>
 #include <random>
+#include <limits>
 
 // STD C includes
 #include <cstdlib>
@@ -29,13 +30,29 @@ using namespace std;
 
 // Constants
 static const float BETA = 0.01f; // Probability of failure
+static const float NORM = 100; // Normalization constant
 
-// Structures
+
+// Matches structure
 struct Match {
     float x1, y1, x2, y2;
 };
 
-// Functions
+// Functions prototypes
+void algoSIFT(Image<Color,2>, Image<Color,2>, vector<Match>&);
+
+int random_index(int);
+int _sample( vector<int>&);
+vector<int> sampler( int, int);
+bool is_square(size_t, size_t&);
+Matrix<float> to_matrix(Vector<float>);
+float epipolar_distance(Match, Matrix<float>);
+vector<int> infere_inliers( int, vector<Match>&, vector<int>, float);
+void estimateNiter(int&, int, int, int);
+Matrix<float> estimateF(vector<Match>);
+Matrix<float> computeF(vector<Match>&); 
+void displayEpipolar(Image<Color>, Image<Color>, Matrix<float>);
+
 
 // Display SIFT points and fill vector of point correspondences
 void algoSIFT(Image<Color,2> I1, Image<Color,2> I2, vector<Match>& matches) 
@@ -97,58 +114,196 @@ vector<int> sampler( int n_samples, int n_matches)
     return samples;
 }
 
-vector<int> infereF( vector<int> sampled_matches, float sigma, FMatrix<float,3,3> bestF)
+bool is_square(size_t n, size_t& m)
 {
+    m = static_cast<size_t>( sqrt( static_cast<double_t>(n)) );
+    return abs(n - pow( m, 2)) < numeric_limits<double>::epsilon();
+}
+
+Matrix<float> to_matrix(Vector<float> f)
+{
+    size_t n = 0;
+    assert(is_square( f.size(), n)); // making sure f can be represented as a Matrix
+
+    Matrix<float> F(n,n);
+    for(size_t i=0; i<n; i++)
+        for(size_t j=0; j<n; j++)
+            F(i,j) = f[3*i + j];
+    return F;
+}
+
+float epipolar_distance(Match m, Matrix<float> F)
+{
+    Vector<float> u(3); u[0] = m.x1; u[1] = m.y1; u[2] = 1;
+    Vector<float> v(3); v[0] = m.x2; v[1] = m.y2; v[2] = 1;
+    u  = transpose(F) * u; u.normalize();
+    return abs(u*v);
+}
+
+vector<int> infere_inliers( int n_samples, vector<Match>& matches, vector<int> sampled_matches, float sigma)
+{
+    assert( n_samples == static_cast<int>( sampled_matches.size()));
     vector<int> inliers;
+
+    // Defining System
+    Matrix<float> A = Matrix<float>::Zero(n_samples + 1,9);
+    Matrix<float> F;
+
+    for(int i = 0; i < n_samples; i++)
+    {
+        A(i,0) = matches[ sampled_matches[i]].x1 * matches[ sampled_matches[i]].x2;
+        A(i,1) = matches[ sampled_matches[i]].y1 * matches[ sampled_matches[i]].x2;
+        A(i,2) = matches[ sampled_matches[i]].x2;
+        A(i,3) = matches[ sampled_matches[i]].x1 * matches[ sampled_matches[i]].y2;
+        A(i,4) = matches[ sampled_matches[i]].y1 * matches[ sampled_matches[i]].y2;
+        A(i,5) = matches[ sampled_matches[i]].y2;
+        A(i,6) = matches[ sampled_matches[i]].x1;
+        A(i,7) = matches[ sampled_matches[i]].y1;
+        A(i,8) = 1;
+    }
+
+    // To optimize memory we put all auxilary variables in a scope
+    {
+        Matrix<float> U,V;
+        Vector<float> S;
+        svd(A,U,S,V);
+        V = transpose(V);
+        Vector<float> f = static_cast<Vector<float>>( V.getSubMat(0,9,8,1));
+        F = to_matrix(f);
+
+        // Enforce rank 2
+        svd(F,U,S,V);
+        cout << S << endl << flush;
+        S[2] = 0;
+        F = U * Diagonal(S) * V;
+    }
+
+    // Find Inliers
+    for( int index = 0; index < static_cast<int>(matches.size()); ++index)
+        if( epipolar_distance( matches[index], F) <= sigma)
+            inliers.push_back(index);
+
     return inliers;
 }
 
 void estimateNiter(int& Niter, int n_inliers, int n_samples, int n_matches)
 {
     assert(n_inliers != 0); // otherwise Niter == inf
-    Niter = max( static_cast<int>( ceil( log(BETA)/log(1- pow( static_cast<float>(n_inliers)/static_cast<float>(n_matches), static_cast<float>(n_samples))))), 0);
+    float aux = pow( static_cast<float>(n_inliers)/static_cast<float>(n_matches), static_cast<float>(n_samples));
+    if( abs(aux) > numeric_limits<float>::epsilon()) // otherwise Niter == inf
+        Niter = max( static_cast<int>( ceil( log(BETA)/log(1 - aux ))), 0);
+}
+
+Matrix<float> estimateF( vector<Match> matches)
+{
+    Matrix<float> F;
+    int n = static_cast<int>(matches.size());
+
+    // Defining System
+    Matrix<float> A = Matrix<float>::Zero(n,9);
+    Vector<float> B(n);
+    B.fill(0);
+
+    for(int i = 0; i < n; i++)
+    {
+        A(i,0) = matches[i].x1 * matches[i].x2;
+        A(i,1) = matches[i].y1 * matches[i].x2;
+        A(i,2) = matches[i].x2;
+        A(i,3) = matches[i].x1 * matches[i].y2;
+        A(i,4) = matches[i].y1 * matches[i].y2;
+        A(i,5) = matches[i].y2;
+        A(i,6) = matches[i].x1;
+        A(i,7) = matches[i].y1;
+        A(i,8) = 1;
+    }
+    // Enforce rank 2
+    {
+        Matrix<float> U,V;
+        Vector<float> S;
+        svd(A,U,S,V);
+        V = transpose(V);
+        Vector<float> f = static_cast<Vector<float>>( V.getSubMat(0,9,8,1));
+        cout << "   Mean square Error = " << norm(A*f) << endl << flush;
+        F = to_matrix(f);
+        svd(F,U,S,V);
+        S[2] = 0;
+        F = U * Diagonal(S) * V;
+        S[0] = 1.0/NORM; S[1] = 1.0/NORM; S[2] = 1.0;
+        F = Diagonal(S)*F*Diagonal(S);
+    }
+    return F;
 }
 
 // RANSAC algorithm to compute F from point matches (8-point algorithm)
 // Parameter matches is filtered to keep only inliers as output.
-FMatrix<float,3,3> computeF(vector<Match>& matches) 
+Matrix<float> computeF(vector<Match>& matches) 
 {
     const float distMax(1.5f); // Pixel error for inlier/outlier discrimination
     int Niter(100000); // Adjusted dynamically
-    FMatrix<float,3,3> bestF;
-    vector<int> bestInliers;
-    // --------------- TODO ------------
-    // DO NOT FORGET NORMALIZATION OF points
+
+    Matrix<float> F;
+    vector<int> inliers;
+
     const int n_samples(8);
     const int n_matches = static_cast<int>( matches.size());
-    int n_inliers = n_samples; // In the worse case scenario there is at least the minimum points to estimate F
 
+    cout << "Normalizing..." << endl << flush;
+    // 0. Normalization
+    vector<Match> normalized_matches(matches);
+    for(size_t i=0; i<normalized_matches.size(); ++i)
+    {
+        normalized_matches[i].x1 /= NORM;
+        normalized_matches[i].x2 /= NORM;
+        normalized_matches[i].y1 /= NORM;
+        normalized_matches[i].y2 /= NORM;
+    }
+
+    cout << "Ransac..." << endl << flush;
     // Iterating
+    int n_inliers = n_samples; // In the worse case scenario there is at least the minimum points to estimate F
     int counter(0);
     vector<int> sampled_matches( n_samples, 0);
     while( counter < Niter )
     {
+        cout << "Iteration: " << counter << endl << flush;
+        // 1. Sample matches
+        cout << "   Sample points..." << endl << flush;
         sampled_matches = sampler( n_samples, n_matches);
-        bestInliers = infereF( sampled_matches, distMax, bestF);
-        if( static_cast<int>( bestInliers.size()) >= n_inliers )
-            n_inliers = static_cast<int>( bestInliers.size());
-        counter++;
+
+        // 2. Infere inliers
+        cout << "   Inliers within model..." << endl << flush;
+        inliers = infere_inliers( n_samples, normalized_matches, sampled_matches, distMax/NORM);
+        // 3. Update Niter
+        if( static_cast<int>( inliers.size()) >= n_inliers )
+            n_inliers = static_cast<int>( inliers.size());
+        cout << "   Number of inliers : " << n_inliers << endl << flush;
+
         estimateNiter( Niter, n_inliers, n_samples, n_matches);
-    }  
+        cout << "   Niter estimate: " << Niter << endl << flush;
+        counter++;
+    }
 
-
-    // Updating matches with inliers only
-    vector<Match> all=matches;
+    // Keeping inliers only
+    cout << "Keeping only inliers..." << endl << flush;
+    vector<Match> all(matches);
     matches.clear();
-    for(size_t i=0; i<bestInliers.size(); i++)
-        matches.push_back(all[bestInliers[i]]);
-    return bestF;
+    for(size_t i=0; i<inliers.size(); i++)
+        matches.push_back(all[inliers[i]]);
+
+    normalized_matches.clear();
+    for(size_t i=0; i<inliers.size(); i++)
+        normalized_matches.push_back(all[inliers[i]]);
+
+    // Estimating F
+    cout << "Estimating F ..." << endl << flush;
+    F = estimateF(normalized_matches);
+    return F;
 }
 
 // Expects clicks in one image and show corresponding line in other image.
 // Stop at right-click.
-void displayEpipolar(Image<Color> I1, Image<Color> I2,
-                     const FMatrix<float,3,3>& F) {
+void displayEpipolar(Image<Color> I1, Image<Color> I2, Matrix<float> F) 
+{
     while(true) {
         int x,y;
         if(getMouse(x,y) == 3)
@@ -157,10 +312,9 @@ void displayEpipolar(Image<Color> I1, Image<Color> I2,
     }
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
-    srand((unsigned int)time(0));
-
+    cout << "Reading Images..." << endl << flush;
     const char* s1 = argc>1? argv[1]: srcPath("ressources/images/im1.jpg");
     const char* s2 = argc>2? argv[2]: srcPath("ressources/images/im2.jpg");
 
@@ -177,27 +331,35 @@ int main(int argc, char* argv[])
     display(I1,0,0);
     display(I2,w,0);
 
+    cout << "Images displayed." << endl << flush;
+
     vector<Match> matches;
+    cout << "Running SIFT Algorithm..." << endl << flush;
     algoSIFT(I1, I2, matches);
     cout << " matches: " << matches.size() << endl;
+    cout << "Waiting for a click..." << endl << flush;
     click();
     
-    FMatrix<float,3,3> F = computeF(matches);
+    cout << "Computing F..." << endl << flush;
+    Matrix<float> F = computeF(matches);
     cout << "F="<< endl << F << flush;
 
     // Redisplay with matches
+    cout << "Redisplaying with matches..." << endl << flush;
     display(I1,0,0);
     display(I2,w,0);
     for(size_t i=0; i<matches.size(); i++) {
-        Color c( rand()%256, rand()%256, rand()%256);
-        fillCircle(matches[i].x1+0, matches[i].y1, 2, c);
-        fillCircle(matches[i].x2+w, matches[i].y2, 2, c);        
+        Color c( static_cast<unsigned char>( random_index(256)), static_cast<unsigned char>(random_index(256)), static_cast<unsigned char>(random_index(256)));
+        fillCircle( static_cast<int>(matches[i].x1), static_cast<int>(matches[i].y1), 2, c);
+        fillCircle(static_cast<int>(matches[i].x2+w), static_cast<int>(matches[i].y2), 2, c);        
     }
+    cout << "Waiting for a click..." << endl << flush;
     click();
 
     // Redisplay without SIFT points
     display(I1,0,0);
     display(I2,w,0);
+    cout << "Displaying epipolar lines..." << endl << flush;
     displayEpipolar(I1, I2, F);
 
     endGraphics();
