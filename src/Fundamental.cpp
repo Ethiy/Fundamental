@@ -173,17 +173,19 @@ vector<int> infere_inliers(Matrix<double>& F, int n_samples, vector<Match>& matc
 
         // Enforce rank 2
         svd(F,U,S,V);
-        cout << S << endl << flush;
         S[2] = 0;
         F = U * Diagonal(S) * V;
-        S[0] = 1.0/NORM; S[1] = 1.0/NORM; S[2] = 1.0;
-        F = Diagonal(S)*F*Diagonal(S);
     }
 
     // Find Inliers
     for( int index = 0; index < static_cast<int>(matches.size()); ++index)
         if( epipolar_distance( matches[index], F) <= sigma)
             inliers.push_back(index);
+
+    // Normalizing F
+    Vector<double> N(3);
+    N[0] = 1.0/NORM; N[1] = 1.0/NORM; N[2] = 1.0;
+    F = Diagonal(N)*F*Diagonal(N);
 
     return inliers;
 }
