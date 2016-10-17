@@ -29,13 +29,13 @@ using namespace std;
 
 
 // Constants
-static const float BETA = 0.01f; // Probability of failure
-static const float NORM = 100; // Normalization constant
+static const double BETA = 0.01f; // Probability of failure
+static const double NORM = 150; // Normalization constant
 
 
 // Matches structure
 struct Match {
-    float x1, y1, x2, y2;
+    double x1, y1, x2, y2;
 };
 
 // Functions prototypes
@@ -45,13 +45,14 @@ int random_index(int);
 int _sample( vector<int>&);
 vector<int> sampler( int, int);
 bool is_square(size_t, size_t&);
-Matrix<float> to_matrix(Vector<float>);
-float epipolar_distance(Match, Matrix<float>);
-vector<int> infere_inliers( int, vector<Match>&, vector<int>, float);
+Matrix<double> to_matrix(Vector<double>);
+double epipolar_distance(Match, Matrix<double>);
+vector<int> infere_inliers( int, vector<Match>&, vector<int>, double);
 void estimateNiter(int&, int, int, int);
-Matrix<float> estimateF(vector<Match>);
-Matrix<float> computeF(vector<Match>&); 
-void displayEpipolar(Image<Color>, Image<Color>, Matrix<float>);
+Matrix<double> estimateF(vector<Match>);
+Matrix<double> computeF(vector<Match>&); 
+void displayEpipolar(Image<Color>, Image<Color>, Matrix<double>);
+void line( Vector<double>, IntPoint2&, IntPoint2&, int, int, int);
 
 
 // Display SIFT points and fill vector of point correspondences
@@ -120,34 +121,35 @@ bool is_square(size_t n, size_t& m)
     return abs(n - pow( m, 2)) < numeric_limits<double>::epsilon();
 }
 
-Matrix<float> to_matrix(Vector<float> f)
+Matrix<double> to_matrix(Vector<double> f)
 {
     size_t n = 0;
     assert(is_square( f.size(), n)); // making sure f can be represented as a Matrix
 
-    Matrix<float> F(n,n);
+    Matrix<double> F(n,n);
     for(size_t i=0; i<n; i++)
         for(size_t j=0; j<n; j++)
             F(i,j) = f[3*i + j];
     return F;
 }
 
-float epipolar_distance(Match m, Matrix<float> F)
+double epipolar_distance(Match m, Matrix<double> F)
 {
-    Vector<float> u(3); u[0] = m.x1; u[1] = m.y1; u[2] = 1;
-    Vector<float> v(3); v[0] = m.x2; v[1] = m.y2; v[2] = 1;
-    u  = transpose(F) * u; u.normalize();
+    Vector<double> u(3); u[0] = m.x1; u[1] = m.y1; u[2] = 1;
+    Vector<double> v(3); v[0] = m.x2; v[1] = m.y2; v[2] = 1;
+    u = transpose(F) * u;
+    u = u / ( sqrt( pow(u[0],2.) + pow( u[1],2.)));
     return abs(u*v);
 }
 
-vector<int> infere_inliers( int n_samples, vector<Match>& matches, vector<int> sampled_matches, float sigma)
+vector<int> infere_inliers( int n_samples, vector<Match>& matches, vector<int> sampled_matches, double sigma)
 {
     assert( n_samples == static_cast<int>( sampled_matches.size()));
     vector<int> inliers;
 
     // Defining System
-    Matrix<float> A = Matrix<float>::Zero(n_samples + 1,9);
-    Matrix<float> F;
+    Matrix<double> A = Matrix<double>::Zero(n_samples + 1,9);
+    Matrix<double> F;
 
     for(int i = 0; i < n_samples; i++)
     {
@@ -164,11 +166,11 @@ vector<int> infere_inliers( int n_samples, vector<Match>& matches, vector<int> s
 
     // To optimize memory we put all auxilary variables in a scope
     {
-        Matrix<float> U,V;
-        Vector<float> S;
+        Matrix<double> U,V;
+        Vector<double> S;
         svd(A,U,S,V);
         V = transpose(V);
-        Vector<float> f = static_cast<Vector<float>>( V.getSubMat(0,9,8,1));
+        Vector<double> f = static_cast<Vector<double>>( V.getSubMat(0,9,8,1));
         F = to_matrix(f);
 
         // Enforce rank 2
@@ -189,19 +191,19 @@ vector<int> infere_inliers( int n_samples, vector<Match>& matches, vector<int> s
 void estimateNiter(int& Niter, int n_inliers, int n_samples, int n_matches)
 {
     assert(n_inliers != 0); // otherwise Niter == inf
-    float aux = pow( static_cast<float>(n_inliers)/static_cast<float>(n_matches), static_cast<float>(n_samples));
-    if( abs(aux) > numeric_limits<float>::epsilon()) // otherwise Niter == inf
+    double aux = pow( static_cast<double>(n_inliers)/static_cast<double>(n_matches), static_cast<double>(n_samples));
+    if( abs(aux) > numeric_limits<double>::epsilon()) // otherwise Niter == inf
         Niter = max( static_cast<int>( ceil( log(BETA)/log(1 - aux ))), 0);
 }
 
-Matrix<float> estimateF( vector<Match> matches)
+Matrix<double> estimateF( vector<Match> matches)
 {
-    Matrix<float> F;
+    Matrix<double> F;
     int n = static_cast<int>(matches.size());
 
     // Defining System
-    Matrix<float> A = Matrix<float>::Zero(n,9);
-    Vector<float> B(n);
+    Matrix<double> A = Matrix<double>::Zero(n,9);
+    Vector<double> B(n);
     B.fill(0);
 
     for(int i = 0; i < n; i++)
@@ -218,11 +220,11 @@ Matrix<float> estimateF( vector<Match> matches)
     }
     // Enforce rank 2
     {
-        Matrix<float> U,V;
-        Vector<float> S;
+        Matrix<double> U,V;
+        Vector<double> S;
         svd(A,U,S,V);
         V = transpose(V);
-        Vector<float> f = static_cast<Vector<float>>( V.getSubMat(0,9,8,1));
+        Vector<double> f = static_cast<Vector<double>>( V.getSubMat(0,9,8,1));
         cout << "   Mean square Error = " << norm(A*f) << endl << flush;
         F = to_matrix(f);
         svd(F,U,S,V);
@@ -234,14 +236,51 @@ Matrix<float> estimateF( vector<Match> matches)
     return F;
 }
 
+void line( Vector<double> v, IntPoint2& left, IntPoint2& right, int w, int h, int view)
+{
+    assert( view == 0 || view == 1);
+    if( abs(v[1]) > numeric_limits<double>::epsilon() )
+    {
+        left[0] = view * w; right[0] = w * (1 + view);
+
+        if( abs(v[0]) > numeric_limits<double>::epsilon() )
+        {
+            left[1] = - static_cast<int>( round(v[2]/v[1]));
+            if(left[1]<0)
+            {
+                left[0] = - static_cast<int>( round(v[2] / v[0])) + view * w;
+                left[1] = 0;
+            }
+            right[1] = - static_cast<int>( round(v[0] / v[1])) * w - static_cast<int>( round(v[2] / v[1]));
+            if(right[1]>h)
+            {
+                right[1] = view * w;
+                right[0] = - static_cast<int>( round(v[2] / v[0])) - static_cast<int>( round(v[1] / v[0])) * h;
+            }
+        }
+        else
+        {
+            left[1] = - static_cast<int>( round(v[2] /  v[1]));
+            right[1] = - static_cast<int>( round(v[2] / v[1]));
+        }
+    }
+    else
+    {
+        left[0] = - static_cast<int>( round(v[2] /  v[0])) + view * w;
+        left[1] = 0;
+        right[0] = - static_cast<int>( round(v[2] /  v[0])) + view * w;
+        right[1] = h;
+    }
+}
+
 // RANSAC algorithm to compute F from point matches (8-point algorithm)
 // Parameter matches is filtered to keep only inliers as output.
-Matrix<float> computeF(vector<Match>& matches) 
+Matrix<double> computeF(vector<Match>& matches) 
 {
-    const float distMax(1.5f); // Pixel error for inlier/outlier discrimination
+    const double distMax(1.5f); // Pixel error for inlier/outlier discrimination
     int Niter(100000); // Adjusted dynamically
 
-    Matrix<float> F;
+    Matrix<double> F;
     vector<int> inliers;
 
     const int n_samples(8);
@@ -272,7 +311,7 @@ Matrix<float> computeF(vector<Match>& matches)
 
         // 2. Infere inliers
         cout << "   Inliers within model..." << endl << flush;
-        inliers = infere_inliers( n_samples, normalized_matches, sampled_matches, distMax/NORM);
+        inliers = infere_inliers( n_samples, normalized_matches, sampled_matches, distMax);
         // 3. Update Niter
         if( static_cast<int>( inliers.size()) >= n_inliers )
             n_inliers = static_cast<int>( inliers.size());
@@ -302,13 +341,28 @@ Matrix<float> computeF(vector<Match>& matches)
 
 // Expects clicks in one image and show corresponding line in other image.
 // Stop at right-click.
-void displayEpipolar(Image<Color> I1, Image<Color> I2, Matrix<float> F) 
+void displayEpipolar(Image<Color> I1, Image<Color> I2, Matrix<double> F) 
 {
-    while(true) {
+    while(true) 
+    {
+        Vector<double> v(3);
+        v[2] = 1;
+        int w = I1.width();
         int x,y;
         if(getMouse(x,y) == 3)
             break;
-        // --------------- TODO ------------
+        cout << "Point clicked = " << x << ' ' << y << endl << flush;
+        int view = static_cast<int>(x<w);
+        cout << "The epipolar view is in Image : " << view + 1 << endl << flush;
+        v[1] = y;
+        v[0] = x;
+        v = ( static_cast<double>(view) * transpose(F) + static_cast<double>(1 - view) * F) * v;
+        cout << v << endl;
+        IntPoint2 left,right;
+        int h = (view * I2.height() + (1-view) * I1.height());
+        line( v, left, right, w, h, view);
+        cout << left << " and  " << right << endl;
+        drawLine( left, right, RED, 2); 
     }
 }
 
@@ -341,7 +395,7 @@ int main(int argc, char** argv)
     click();
     
     cout << "Computing F..." << endl << flush;
-    Matrix<float> F = computeF(matches);
+    Matrix<double> F = computeF(matches);
     cout << "F="<< endl << F << flush;
 
     // Redisplay with matches
