@@ -29,8 +29,8 @@ using namespace std;
 
 
 // Constants
-static const double BETA = 0.01f; // Probability of failure
-static const double NORM = 150; // Normalization constant
+static const double BETA = 0.01; // Probability of failure
+static const double NORM = 1000; // Normalization constant
 
 
 // Matches structure
@@ -137,8 +137,8 @@ double epipolar_distance(Match m, Matrix<double> F)
 {
     Vector<double> u(3); u[0] = m.x1; u[1] = m.y1; u[2] = 1;
     Vector<double> v(3); v[0] = m.x2; v[1] = m.y2; v[2] = 1;
-    u = transpose(F) * u;
-    u = u / ( sqrt( pow(u[0],2.) + pow( u[1],2.)));
+    v = transpose(F) * v;
+    v = v / ( sqrt( pow(v[0],2.) + pow( v[1],2.)));
     return abs(u*v);
 }
 
@@ -277,7 +277,7 @@ void line( Vector<double> v, IntPoint2& left, IntPoint2& right, int w, int h, in
 // Parameter matches is filtered to keep only inliers as output.
 Matrix<double> computeF(vector<Match>& matches) 
 {
-    const double distMax(1.5f); // Pixel error for inlier/outlier discrimination
+    const double distMax(1.5); // Pixel error for inlier/outlier discrimination
     int Niter(100000); // Adjusted dynamically
 
     Matrix<double> F;
