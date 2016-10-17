@@ -254,7 +254,7 @@ void line( Vector<double> v, IntPoint2& left, IntPoint2& right, int w, int h, in
             right[1] = - static_cast<int>( round(v[0] / v[1])) * w - static_cast<int>( round(v[2] / v[1]));
             if(right[1]>h)
             {
-                right[1] = view * w;
+                right[1] = h;
                 right[0] = - static_cast<int>( round(v[2] / v[0])) - static_cast<int>( round(v[1] / v[0])) * h;
             }
         }
@@ -354,10 +354,9 @@ void displayEpipolar(Image<Color> I1, Image<Color> I2, Matrix<double> F)
         cout << "Point clicked = " << x << ' ' << y << endl << flush;
         int view = static_cast<int>(x<w);
         cout << "The epipolar view is in Image : " << view + 1 << endl << flush;
-        v[1] = y;
-        v[0] = x;
+        v[1] = static_cast<double>(y);
+        v[0] = static_cast<double>(x - (1 - view) * w) ;
         v = ( static_cast<double>(view) * transpose(F) + static_cast<double>(1 - view) * F) * v;
-        cout << v << endl;
         IntPoint2 left,right;
         int h = (view * I2.height() + (1-view) * I1.height());
         line( v, left, right, w, h, view);
